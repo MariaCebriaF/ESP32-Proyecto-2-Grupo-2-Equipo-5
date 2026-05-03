@@ -74,5 +74,3 @@ giirob/pr2/grupo2equipo5/pedido/status
 giirob/pr2/grupo2equipo5/pedido/command
 ```
 
-
-# ESP32-Proyecto-2-Grupo-2-Equipo-5
