@@ -32,5 +32,6 @@ void setup() {
 void loop() {
   wifi_loop();
   mqtt_loop();
+  enviarMensajePorTopic(PRUEBA_TOPIC, "Hola q pasa");
   on_loop();
 }

@@ -12,7 +12,7 @@
 #define NET_PASSWD "megustalatortilla"
 
 // MQTT
-#define MQTT_SERVER_IP "mqtt.dsic.upv.es"
+#define MQTT_SERVER_IP "broker.hivemq.com"
 #define MQTT_SERVER_PORT 1883
 #define MQTT_USERNAME "giirob"
 #define MQTT_PASSWORD "UPV2024"

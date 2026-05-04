@@ -12,7 +12,7 @@
 #define NET_PASSWD "megustalatortilla"
 
 // MQTT
-#define MQTT_SERVER_IP "mqtt.dsic.upv.es"
+#define MQTT_SERVER_IP "broker.hivemq.com"
 #define MQTT_SERVER_PORT 1883
 #define MQTT_USERNAME "giirob"
 #define MQTT_PASSWORD "UPV2024"
@@ -22,6 +22,7 @@
 #define ALMACEN_REGISTRO_TOPIC BASE_TOPIC "/almacen/registro"
 #define ALMACEN_STATUS_TOPIC BASE_TOPIC "/almacen/status"
 #define ALMACEN_COMMAND_TOPIC BASE_TOPIC "/almacen/command"
+#define PRUEBA_TOPIC "prueba/esp32"
 
 // IO
 #define LED_BUILTIN 2

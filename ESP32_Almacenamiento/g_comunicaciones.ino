@@ -1,6 +1,7 @@
 void suscribirseATopics() {
   mqtt_subscribe(ALMACEN_COMMAND_TOPIC);
   mqtt_subscribe(ALMACEN_STATUS_TOPIC);
+  mqtt_subscribe(PRUEBA_TOPIC);
 }
 
 void alRecibirMensajePorTopic(char* topic, String incomingMessage) {
