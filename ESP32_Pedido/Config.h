@@ -8,7 +8,7 @@
 #define DEVICE_GIIROB_PR2_ID "grupo2equipo5-pedido"
 
 // WIFI
-#define NET_SSID "María's iPhone"
+#define NET_SSID "RedPR2"
 #define NET_PASSWD "megustalatortilla"
 
 // MQTT

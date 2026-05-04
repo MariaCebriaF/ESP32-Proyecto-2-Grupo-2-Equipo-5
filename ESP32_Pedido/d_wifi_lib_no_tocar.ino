@@ -1,4 +1,4 @@
-#define WIFI_CONNECTION_TIMEOUT_SECONDS 15
+#define WIFI_CONNECTION_TIMEOUT_SECONDS 30
 #define WIFI_RECONNECT_INTERVAL_MS 10000
 
 // Usamos comunicaciones TLS/SSL si se define el certificado raíz CA
@@ -31,8 +31,11 @@ void wifi_connect() {
   delay(10);
 
   WiFi.mode(WIFI_STA); //Optional
+  WiFi.persistent(false);
+  WiFi.setSleep(false);
   trace("MAC Address: ");
   traceln(WiFi.macAddress());
+  wifi_scan_networks();
 
 #ifdef SSL_ROOT_CA
   // Set Root CA certificate
@@ -80,8 +83,49 @@ void wifi_reconnect(uint retries) {
     errorln("-X- Cannot connect to the WiFi newtwork");
     error("WiFi status code: ");
     errorln(WiFi.status());
+    error("WiFi status text: ");
+    errorln(wifi_status_text(WiFi.status()));
     WiFi.disconnect(false);
   }
 }
 
+void wifi_scan_networks() {
+  infoln("Scanning WiFi networks...");
+  int networkCount = WiFi.scanNetworks();
+
+  if (networkCount <= 0) {
+    warnln("No WiFi networks found.");
+    return;
+  }
+
+  for (int i = 0; i < networkCount; i++) {
+    info("  SSID: ");
+    info(WiFi.SSID(i));
+    info(" | RSSI: ");
+    info(WiFi.RSSI(i));
+    info(" | Channel: ");
+    infoln(WiFi.channel(i));
+  }
+}
+
+const char* wifi_status_text(wl_status_t status) {
+  switch (status) {
+    case WL_IDLE_STATUS:
+      return "WL_IDLE_STATUS";
+    case WL_NO_SSID_AVAIL:
+      return "WL_NO_SSID_AVAIL: no se encuentra el SSID";
+    case WL_SCAN_COMPLETED:
+      return "WL_SCAN_COMPLETED";
+    case WL_CONNECTED:
+      return "WL_CONNECTED";
+    case WL_CONNECT_FAILED:
+      return "WL_CONNECT_FAILED: posible contrasena incorrecta o autenticacion incompatible";
+    case WL_CONNECTION_LOST:
+      return "WL_CONNECTION_LOST";
+    case WL_DISCONNECTED:
+      return "WL_DISCONNECTED";
+    default:
+      return "UNKNOWN";
+  }
+}
 
