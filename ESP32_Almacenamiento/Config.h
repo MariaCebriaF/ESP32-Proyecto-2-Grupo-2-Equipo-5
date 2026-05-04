@@ -8,8 +8,8 @@
 #define DEVICE_GIIROB_PR2_ID "grupo2equipo5-almacen"
 
 // WIFI
-#define NET_SSID "UPV-PSK"
-#define NET_PASSWD "giirob-pr2-2023"
+#define NET_SSID "María's iPhone"
+#define NET_PASSWD "megustalatortilla"
 
 // MQTT
 #define MQTT_SERVER_IP "mqtt.dsic.upv.es"
