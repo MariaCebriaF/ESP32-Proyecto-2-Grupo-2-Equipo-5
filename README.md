@@ -74,3 +74,5 @@ giirob/pr2/grupo2equipo5/pedido/status
 giirob/pr2/grupo2equipo5/pedido/command
 ```
 
+
+//Pendiente de añadir más cosas en el readme.md
