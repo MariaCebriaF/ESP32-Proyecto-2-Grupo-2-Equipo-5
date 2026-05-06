@@ -1,0 +1,279 @@
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+from typing import Any
+
+import psycopg
+from psycopg.rows import dict_row
+
+
+DEFAULT_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/medicamentos"
+DEFAULT_PRECIO_VENTA = float(os.getenv("DEFAULT_PRECIO_VENTA", "0"))
+DEFAULT_SEGURO_SS = os.getenv("DEFAULT_SEGURO_SS", "false").lower() in {"1", "true", "yes", "si"}
+
+
+@dataclass(frozen=True)
+class Reservation:
+    ok: bool
+    estado: str
+    mensaje: str
+    id_pedido: str | None = None
+    id_medicamento: str | None = None
+    tipo: str | None = None
+    cantidad: int = 0
+    posicion: str | None = None
+    cod_barras: str | None = None
+    caducidad: str | None = None
+    precio_total: float | None = None
+
+
+def database_url(value: str | None = None) -> str:
+    return value or os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
+
+
+def connect(db_url: str | None = None) -> psycopg.Connection:
+    return psycopg.connect(database_url(db_url), row_factory=dict_row)
+
+
+def validate_schema(db_url: str | None = None) -> None:
+    required_tables = {
+        "medicamento",
+        "cliente",
+        "venta",
+        "caja_grande",
+        "cinta_transportadora",
+        "sensor",
+        "robot",
+        "herramienta",
+        "contiene",
+    }
+    with connect(db_url) as conn:
+        rows = conn.execute(
+            """
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = 'public'
+            """
+        ).fetchall()
+
+    found = {row["table_name"] for row in rows}
+    missing = sorted(required_tables - found)
+    if missing:
+        raise RuntimeError(f"Faltan tablas en PostgreSQL: {', '.join(missing)}")
+
+
+def seed_demo_data(db_url: str | None = None) -> None:
+    rows = [
+        ("MED001", 847000100001, "Paracetamol", "2027-05-01", "Demo", 3, "disponible", "X01-Y01", 3.50, True),
+        ("MED002", 847000100002, "Ibuprofeno", "2027-08-15", "Demo", 2, "disponible", "X01-Y02", 4.10, True),
+        ("MED003", 847000100003, "Amoxicilina", "2026-11-20", "Demo", 1, "disponible", "X02-Y01", 6.25, True),
+    ]
+    with connect(db_url) as conn:
+        for row in rows:
+            conn.execute(
+                """
+                INSERT INTO medicamento (
+                  id_medicamento, cod_barras, nombre, caducidad, descripcion,
+                  stock, estado, pos, precio_venta, seguro_ss
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (id_medicamento) DO UPDATE SET
+                  cod_barras = EXCLUDED.cod_barras,
+                  nombre = EXCLUDED.nombre,
+                  caducidad = EXCLUDED.caducidad,
+                  descripcion = EXCLUDED.descripcion,
+                  stock = EXCLUDED.stock,
+                  estado = EXCLUDED.estado,
+                  pos = EXCLUDED.pos,
+                  precio_venta = EXCLUDED.precio_venta,
+                  seguro_ss = EXCLUDED.seguro_ss
+                """,
+                row,
+            )
+
+
+def register_storage_event(payload: dict[str, Any], db_url: str | None = None) -> bool:
+    nombre = str(payload.get("nombre") or payload.get("tipo") or "").strip()
+    posicion = str(payload.get("pos") or payload.get("posicion") or "").strip()
+    cantidad = int(payload.get("cantidad") or 1)
+    cod_barras = _int_or_default(payload.get("cod_barras"), 0)
+    caducidad = payload.get("caducidad")
+
+    if not nombre or not posicion:
+        raise ValueError("El evento de almacen necesita nombre/tipo y pos/posicion")
+    if not caducidad:
+        raise ValueError("El evento de almacen necesita caducidad")
+    if cantidad <= 0:
+        raise ValueError("La cantidad debe ser mayor que cero")
+
+    with connect(db_url) as conn:
+        with conn.transaction():
+            existing = _find_medicine_for_update(conn, nombre, cod_barras)
+            if existing:
+                conn.execute(
+                    """
+                    UPDATE medicamento
+                    SET stock = stock + %s,
+                        estado = 'disponible',
+                        pos = COALESCE(%s, pos),
+                        caducidad = COALESCE(%s, caducidad),
+                        cod_barras = CASE WHEN %s <> 0 THEN %s ELSE cod_barras END
+                    WHERE id_medicamento = %s
+                    """,
+                    (cantidad, posicion, caducidad, cod_barras, cod_barras, existing["id_medicamento"]),
+                )
+                return False
+
+            id_medicamento = str(
+                payload.get("id_medicamento")
+                or payload.get("id_evento")
+                or (f"MED{cod_barras}" if cod_barras else f"MED{nombre[:8].upper()}")
+            ).strip()
+            conn.execute(
+                """
+                INSERT INTO medicamento (
+                  id_medicamento, cod_barras, nombre, caducidad, descripcion,
+                  stock, estado, pos, precio_venta, seguro_ss
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, 'disponible', %s, %s, %s)
+                """,
+                (
+                    id_medicamento,
+                    cod_barras,
+                    nombre,
+                    caducidad,
+                    payload.get("descripcion"),
+                    cantidad,
+                    posicion,
+                    float(payload.get("precio_venta") or DEFAULT_PRECIO_VENTA),
+                    bool(payload.get("seguro_SS", payload.get("seguro_ss", DEFAULT_SEGURO_SS))),
+                ),
+            )
+            return True
+
+
+def reserve_order(payload: dict[str, Any], db_url: str | None = None) -> Reservation:
+    id_pedido = str(payload.get("id_pedido") or "").strip()
+    nombre = str(payload.get("nombre") or payload.get("tipo") or "").strip()
+    cantidad = int(payload.get("cantidad") or 1)
+    dni = payload.get("DNI") or payload.get("dni")
+
+    if not id_pedido:
+        raise ValueError("El pedido necesita id_pedido")
+    if not nombre:
+        raise ValueError("El pedido necesita nombre/tipo")
+    if cantidad <= 0:
+        raise ValueError("La cantidad debe ser mayor que cero")
+
+    with connect(db_url) as conn:
+        with conn.transaction():
+            item = conn.execute(
+                """
+                SELECT *
+                FROM medicamento
+                WHERE lower(trim(nombre)) = lower(trim(%s))
+                  AND stock >= %s
+                  AND lower(trim(estado)) IN ('disponible', 'ok', 'activo')
+                ORDER BY caducidad ASC, id_medicamento ASC
+                LIMIT 1
+                FOR UPDATE SKIP LOCKED
+                """,
+                (nombre, cantidad),
+            ).fetchone()
+
+            if not item:
+                return Reservation(False, "no_disponible", "No hay stock disponible", id_pedido, tipo=nombre, cantidad=cantidad)
+
+            new_stock = int(item["stock"]) - cantidad
+            new_state = "disponible" if new_stock > 0 else "agotado"
+            conn.execute(
+                """
+                UPDATE medicamento
+                SET stock = %s, estado = %s
+                WHERE id_medicamento = %s
+                """,
+                (new_stock, new_state, item["id_medicamento"]),
+            )
+
+            precio_total = float(item["precio_venta"]) * cantidad
+            if dni:
+                conn.execute(
+                    """
+                    INSERT INTO venta (dni, id_medicamento, fecha_venta, precio_total)
+                    VALUES (%s, %s, CURRENT_DATE, %s)
+                    ON CONFLICT (dni, id_medicamento, fecha_venta) DO UPDATE SET
+                      precio_total = venta.precio_total + EXCLUDED.precio_total
+                    """,
+                    (dni, item["id_medicamento"], precio_total),
+                )
+
+            return Reservation(
+                True,
+                "reservado",
+                "Stock reservado; pendiente de RoboDK",
+                id_pedido=id_pedido,
+                id_medicamento=item["id_medicamento"],
+                tipo=str(item["nombre"]).strip(),
+                cantidad=cantidad,
+                posicion=str(item["pos"]).strip() if item["pos"] is not None else None,
+                cod_barras=str(item["cod_barras"]),
+                caducidad=str(item["caducidad"]),
+                precio_total=precio_total,
+            )
+
+
+def update_order_status(
+    _id_pedido: str,
+    _estado: str,
+    _mensaje: str,
+    _db_url: str | None = None,
+) -> None:
+    # Vuestro esquema no tiene tabla Pedido. El estado del flujo se comunica por MQTT.
+    return None
+
+
+def inventory_snapshot(db_url: str | None = None) -> list[dict[str, Any]]:
+    with connect(db_url) as conn:
+        rows = conn.execute(
+            """
+            SELECT id_medicamento, cod_barras, nombre, caducidad, stock, estado, pos, precio_venta, seguro_ss
+            FROM medicamento
+            ORDER BY pos ASC NULLS LAST, nombre ASC
+            """
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+
+def _find_medicine_for_update(conn: psycopg.Connection, nombre: str, cod_barras: int) -> dict[str, Any] | None:
+    if cod_barras:
+        row = conn.execute(
+            """
+            SELECT *
+            FROM medicamento
+            WHERE cod_barras = %s
+            LIMIT 1
+            FOR UPDATE
+            """,
+            (cod_barras,),
+        ).fetchone()
+        if row:
+            return row
+
+    return conn.execute(
+        """
+        SELECT *
+        FROM medicamento
+        WHERE lower(trim(nombre)) = lower(trim(%s))
+        LIMIT 1
+        FOR UPDATE
+        """,
+        (nombre,),
+    ).fetchone()
+
+
+def _int_or_default(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
