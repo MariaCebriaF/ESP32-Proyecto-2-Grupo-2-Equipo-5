@@ -1,6 +1,13 @@
 uint8_t ledStatus = 0;
 unsigned long requestCounter = 1;
 
+void publishMedicineRequest(const char* tipo, uint8_t cantidad);
+void publishMedicineRequest(const char* tipo, uint8_t cantidad, uint8_t gpio);
+void publishParacetamolRequest();
+void publishIbuprofenoRequest();
+void publishEnantyumRequest();
+void printSerialHelp();
+
 struct MedicineRequest {
   const char* tipo;
   uint8_t cantidad;
@@ -9,7 +16,7 @@ struct MedicineRequest {
 MedicineRequest demoRequests[] = {
   {"Paracetamol", 1},
   {"Ibuprofeno", 1},
-  {"Amoxicilina", 1}
+  {"Enantyum", 1}
 };
 
 const uint8_t demoRequestCount = sizeof(demoRequests) / sizeof(demoRequests[0]);
@@ -25,6 +32,10 @@ void setInternalLed(uint8_t status) {
 }
 
 void publishMedicineRequest(const char* tipo, uint8_t cantidad) {
+  publishMedicineRequest(tipo, cantidad, 0);
+}
+
+void publishMedicineRequest(const char* tipo, uint8_t cantidad, uint8_t gpio) {
   JsonDocument doc;
   String requestId = String("PED-") + String(requestCounter++);
 
@@ -32,13 +43,39 @@ void publishMedicineRequest(const char* tipo, uint8_t cantidad) {
   doc["device_id"] = deviceID;
   doc["tipo"] = tipo;
   doc["cantidad"] = cantidad == 0 ? 1 : cantidad;
+  if (gpio > 0) {
+    doc["gpio"] = gpio;
+  }
 
   String payload;
   serializeJson(doc, payload);
 
+  Serial.print("BOTON/PEDIDO -> tipo=");
+  Serial.print(tipo);
+  Serial.print(" cantidad=");
+  Serial.print(cantidad == 0 ? 1 : cantidad);
+  if (gpio > 0) {
+    Serial.print(" gpio=");
+    Serial.print(gpio);
+  }
+  Serial.print(" topic=");
+  Serial.println(PEDIDO_REQUEST_TOPIC);
+
   infoln("Publicando solicitud de medicamento:");
   infoln(payload);
   enviarMensajePorTopic(PEDIDO_REQUEST_TOPIC, payload);
+}
+
+void publishParacetamolRequest() {
+  publishMedicineRequest("Paracetamol", 1, BUTTON_PARACETAMOL_PIN);
+}
+
+void publishIbuprofenoRequest() {
+  publishMedicineRequest("Ibuprofeno", 1, BUTTON_IBUPROFENO_PIN);
+}
+
+void publishEnantyumRequest() {
+  publishMedicineRequest("Enantyum", 1, BUTTON_ENANTYUM_PIN);
 }
 
 void publishSelectedDemoRequest() {

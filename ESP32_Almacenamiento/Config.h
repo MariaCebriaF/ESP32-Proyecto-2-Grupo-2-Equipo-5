@@ -14,8 +14,9 @@
 // MQTT
 #define MQTT_SERVER_IP "broker.hivemq.com"
 #define MQTT_SERVER_PORT 1883
-#define MQTT_USERNAME "giirob"
-#define MQTT_PASSWORD "UPV2024"
+// HiveMQ publico no necesita usuario ni contrasena.
+// #define MQTT_USERNAME "giirob"
+// #define MQTT_PASSWORD "UPV2024"
 
 // Topics del escenario de almacenamiento
 #define BASE_TOPIC "giirob/pr2/grupo2equipo5"

@@ -61,13 +61,13 @@ void mqtt_reconnect(int retries) {
   #else
     if ( mqttClient.connect(mqttClientID.c_str()) ) {
   #endif
-      debugln("-=- Connected to MQTT Broker");
+      infoln("-=- Connected to MQTT Broker");
       // Damos tiempo a que la conexión se establezca por completo
       delay(1000);
     } else {
-      debug("-X- failed, rc=");
-      debugln(mqttClient.state());
-      debugln("-R-   re-trying in 5 seconds");
+      error("-X- MQTT failed, rc=");
+      errorln(mqttClient.state());
+      errorln("-R-   re-trying in 5 seconds");
       // Wait 5 seconds before retrying
       delay(5000);
     }
@@ -84,9 +84,9 @@ void mqttCallback(char* topic, byte* message, unsigned int length) {
     incomingMessage += (char)message[i];
   }
 
-  traceln("<<~~ RECEIVING an MQTT message:");
-  traceln(topic);
-  traceln(incomingMessage);
+  infoln("<<~~ RECEIVING an MQTT message:");
+  infoln(topic);
+  infoln(incomingMessage);
 
   alRecibirMensajePorTopic(topic, incomingMessage);
 }
@@ -97,9 +97,9 @@ void mqtt_publish(const char* topic, String outgoingMessage) {
     return;
   }
 
-  traceln("~~>> PUBLISHING an MQTT message:");
-  traceln(topic);
-  traceln(outgoingMessage);
+  infoln("~~>> PUBLISHING an MQTT message:");
+  infoln(topic);
+  infoln(outgoingMessage);
   mqttClient.publish(topic, outgoingMessage.c_str());
 }
 
@@ -111,7 +111,7 @@ void mqtt_subscribe(const char* topic) {
   }
 
 
-  trace("Subscribed to topic: ");
-  traceln(topic);
+  info("Subscribed to topic: ");
+  infoln(topic);
   mqttClient.subscribe(topic);
 }

@@ -14,8 +14,9 @@
 // MQTT
 #define MQTT_SERVER_IP "broker.hivemq.com"
 #define MQTT_SERVER_PORT 1883
-#define MQTT_USERNAME "giirob"
-#define MQTT_PASSWORD "UPV2024"
+// HiveMQ publico no necesita usuario ni contrasena.
+// #define MQTT_USERNAME "giirob"
+// #define MQTT_PASSWORD "UPV2024"
 
 // Topics del escenario de pedido
 #define BASE_TOPIC "giirob/pr2/grupo2equipo5"
@@ -25,7 +26,9 @@
 
 // IO
 #define LED_BUILTIN 2
-#define BUTTON_PIN 4
+#define BUTTON_PARACETAMOL_PIN 18
+#define BUTTON_IBUPROFENO_PIN 17
+#define BUTTON_ENANTYUM_PIN 16
 
 // El pulsador de las practicas suele cablearse con pull-up: pulsado = LOW.
 #define BUTTON_PRESSED LOW

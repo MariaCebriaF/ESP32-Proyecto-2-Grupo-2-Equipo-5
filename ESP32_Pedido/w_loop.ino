@@ -1,5 +1,11 @@
-unsigned long lastButtonChange = 0;
-uint8_t lastButtonState = !BUTTON_PRESSED;
+uint8_t lastParacetamolState = !BUTTON_PRESSED;
+uint8_t lastIbuprofenoState = !BUTTON_PRESSED;
+uint8_t lastEnantyumState = !BUTTON_PRESSED;
+
+unsigned long lastParacetamolChange = 0;
+unsigned long lastIbuprofenoChange = 0;
+unsigned long lastEnantyumChange = 0;
+
 const unsigned long debounceMs = 80;
 
 void on_loop() {
@@ -8,15 +14,52 @@ void on_loop() {
     processSerialCommand(command);
   }
 
-  uint8_t currentButtonState = digitalRead(BUTTON_PIN);
+  checkParacetamolButton();
+  checkIbuprofenoButton();
+  checkEnantyumButton();
+}
+
+void checkParacetamolButton() {
+  uint8_t currentState = digitalRead(BUTTON_PARACETAMOL_PIN);
   unsigned long now = millis();
 
-  if (currentButtonState != lastButtonState && now - lastButtonChange > debounceMs) {
-    lastButtonChange = now;
-    lastButtonState = currentButtonState;
+  if (currentState != lastParacetamolState && now - lastParacetamolChange > debounceMs) {
+    lastParacetamolChange = now;
+    lastParacetamolState = currentState;
 
-    if (currentButtonState == BUTTON_PRESSED) {
-      publishSelectedDemoRequest();
+    if (currentState == BUTTON_PRESSED) {
+      Serial.println("PULSADO GPIO18 -> Paracetamol");
+      publishParacetamolRequest();
+    }
+  }
+}
+
+void checkIbuprofenoButton() {
+  uint8_t currentState = digitalRead(BUTTON_IBUPROFENO_PIN);
+  unsigned long now = millis();
+
+  if (currentState != lastIbuprofenoState && now - lastIbuprofenoChange > debounceMs) {
+    lastIbuprofenoChange = now;
+    lastIbuprofenoState = currentState;
+
+    if (currentState == BUTTON_PRESSED) {
+      Serial.println("PULSADO GPIO17 -> Ibuprofeno");
+      publishIbuprofenoRequest();
+    }
+  }
+}
+
+void checkEnantyumButton() {
+  uint8_t currentState = digitalRead(BUTTON_ENANTYUM_PIN);
+  unsigned long now = millis();
+
+  if (currentState != lastEnantyumState && now - lastEnantyumChange > debounceMs) {
+    lastEnantyumChange = now;
+    lastEnantyumState = currentState;
+
+    if (currentState == BUTTON_PRESSED) {
+      Serial.println("PULSADO GPIO16 -> Enantyum");
+      publishEnantyumRequest();
     }
   }
 }

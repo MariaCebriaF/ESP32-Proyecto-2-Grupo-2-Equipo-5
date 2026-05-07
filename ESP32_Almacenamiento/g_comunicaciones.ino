@@ -7,6 +7,11 @@ void suscribirseATopics() {
 void alRecibirMensajePorTopic(char* topic, String incomingMessage) {
   incomingMessage.trim();
 
+  if (strcmp(topic, PRUEBA_TOPIC) == 0) {
+    infoln("Mensaje recibido en topic de prueba.");
+    return;
+  }
+
   if (strcmp(topic, ALMACEN_STATUS_TOPIC) == 0) {
     infoln("Estado recibido del integrador:");
     infoln(incomingMessage);
@@ -39,7 +44,10 @@ void alRecibirMensajePorTopic(char* topic, String incomingMessage) {
     } else {
       warnln("Comando MQTT de almacenamiento no reconocido.");
     }
+    return;
   }
+
+  warnln("Topic MQTT no gestionado en almacenamiento.");
 }
 
 void enviarMensajePorTopic(const char* topic, String outgoingMessage) {
