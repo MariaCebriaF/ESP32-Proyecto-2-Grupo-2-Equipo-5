@@ -2,7 +2,7 @@
 
 Proyecto del Grupo 2 Equipo 5 para integrar ESP32-S3, MQTT, una demo web, PostgreSQL/pgAdmin y RoboDK en un escenario de farmacia automatizada.
 
-Nota: este repositorio de GitHub contiene principalmente la parte de firmware ESP32. La documentacion tambien describe las carpetas hermanas del proyecto local (`python_integracion/`, `web_demo_medicamentos/` y `python_robodk/`) porque forman parte del sistema completo desarrollado.
+Nota: este repositorio de GitHub contiene el firmware ESP32, la integracion Python/PostgreSQL, la demo web y los scripts Python de RoboDK usados por ahora en la estacion.
 
 El objetivo del sistema es simular y demostrar un flujo completo:
 
