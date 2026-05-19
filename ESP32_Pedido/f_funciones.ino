@@ -114,7 +114,7 @@ void processOrderStatus(String payload) {
 
   if (strcmp(estado, "preparando") == 0 || strcmp(estado, "entregado") == 0) {
     setInternalLed(1);
-  } else if (strcmp(estado, "no_disponible") == 0 || strcmp(estado, "error") == 0) {
+  } else if (strcmp(estado, "no_disponible") == 0 || strcmp(estado, "error") == 0 || strcmp(estado, "error_robot") == 0) {
     setInternalLed(0);
   }
 }

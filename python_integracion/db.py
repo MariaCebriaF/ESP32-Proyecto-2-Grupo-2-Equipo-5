@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import unicodedata
 from dataclasses import dataclass
 from typing import Any
 
@@ -11,6 +12,15 @@ from psycopg.rows import dict_row
 DEFAULT_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/medicamentos"
 DEFAULT_PRECIO_VENTA = float(os.getenv("DEFAULT_PRECIO_VENTA", "0"))
 DEFAULT_SEGURO_SS = os.getenv("DEFAULT_SEGURO_SS", "false").lower() in {"1", "true", "yes", "si"}
+
+MEDICINE_ALIASES = {
+    "paracetamol": "Paracetamol",
+    "ibuprofeno": "Ibuprofeno",
+    "enantyum": "Enantyum",
+    # En versiones anteriores del demo el tercer medicamento se registraba con este nombre,
+    # pero la ESP32 de pedido, la web y RoboDK trabajan con Enantyum.
+    "amoxicilina": "Enantyum",
+}
 
 
 @dataclass(frozen=True)
@@ -67,7 +77,7 @@ def seed_demo_data(db_url: str | None = None) -> None:
     rows = [
         ("MED001", 847000100001, "Paracetamol", "2027-05-01", "Demo", 3, "disponible", "X01-Y01", 3.50, True),
         ("MED002", 847000100002, "Ibuprofeno", "2027-08-15", "Demo", 2, "disponible", "X01-Y02", 4.10, True),
-        ("MED003", 847000100003, "Amoxicilina", "2026-11-20", "Demo", 1, "disponible", "X02-Y01", 6.25, True),
+        ("MED003", 847000100003, "Enantyum", "2026-11-20", "Demo", 1, "disponible", "X02-Y01", 6.25, True),
     ]
     with connect(db_url) as conn:
         for row in rows:
@@ -94,7 +104,7 @@ def seed_demo_data(db_url: str | None = None) -> None:
 
 
 def register_storage_event(payload: dict[str, Any], db_url: str | None = None) -> bool:
-    nombre = str(payload.get("nombre") or payload.get("tipo") or "").strip()
+    nombre = normalize_medicine_name(payload.get("nombre") or payload.get("tipo"))
     posicion = str(payload.get("pos") or payload.get("posicion") or "").strip()
     cantidad = int(payload.get("cantidad") or 1)
     cod_barras = _int_or_default(payload.get("cod_barras"), 0)
@@ -115,13 +125,14 @@ def register_storage_event(payload: dict[str, Any], db_url: str | None = None) -
                     """
                     UPDATE medicamento
                     SET stock = stock + %s,
+                        nombre = %s,
                         estado = 'disponible',
                         pos = COALESCE(%s, pos),
                         caducidad = COALESCE(%s, caducidad),
                         cod_barras = CASE WHEN %s <> 0 THEN %s ELSE cod_barras END
                     WHERE id_medicamento = %s
                     """,
-                    (cantidad, posicion, caducidad, cod_barras, cod_barras, existing["id_medicamento"]),
+                    (cantidad, nombre, posicion, caducidad, cod_barras, cod_barras, existing["id_medicamento"]),
                 )
                 return False
 
@@ -155,7 +166,7 @@ def register_storage_event(payload: dict[str, Any], db_url: str | None = None) -
 
 def reserve_order(payload: dict[str, Any], db_url: str | None = None) -> Reservation:
     id_pedido = str(payload.get("id_pedido") or "").strip()
-    nombre = str(payload.get("nombre") or payload.get("tipo") or "").strip()
+    nombre = normalize_medicine_name(payload.get("nombre") or payload.get("tipo"))
     cantidad = int(payload.get("cantidad") or 1)
     dni = payload.get("DNI") or payload.get("dni")
 
@@ -168,18 +179,19 @@ def reserve_order(payload: dict[str, Any], db_url: str | None = None) -> Reserva
 
     with connect(db_url) as conn:
         with conn.transaction():
+            lookup_terms = _medicine_lookup_terms(nombre)
             item = conn.execute(
                 """
                 SELECT *
                 FROM medicamento
-                WHERE lower(trim(nombre)) = lower(trim(%s))
+                WHERE lower(trim(nombre)) = ANY(%s::text[])
                   AND stock >= %s
                   AND lower(trim(estado)) IN ('disponible', 'ok', 'activo')
                 ORDER BY caducidad ASC, id_medicamento ASC
                 LIMIT 1
                 FOR UPDATE SKIP LOCKED
                 """,
-                (nombre, cantidad),
+                (lookup_terms, cantidad),
             ).fetchone()
 
             if not item:
@@ -190,10 +202,10 @@ def reserve_order(payload: dict[str, Any], db_url: str | None = None) -> Reserva
             conn.execute(
                 """
                 UPDATE medicamento
-                SET stock = %s, estado = %s
+                SET stock = %s, estado = %s, nombre = %s
                 WHERE id_medicamento = %s
                 """,
-                (new_stock, new_state, item["id_medicamento"]),
+                (new_stock, new_state, nombre, item["id_medicamento"]),
             )
 
             precio_total = float(item["precio_venta"]) * cantidad
@@ -214,7 +226,7 @@ def reserve_order(payload: dict[str, Any], db_url: str | None = None) -> Reserva
                 "Stock reservado; pendiente de RoboDK",
                 id_pedido=id_pedido,
                 id_medicamento=item["id_medicamento"],
-                tipo=str(item["nombre"]).strip(),
+                tipo=nombre,
                 cantidad=cantidad,
                 posicion=str(item["pos"]).strip() if item["pos"] is not None else None,
                 cod_barras=str(item["cod_barras"]),
@@ -264,12 +276,36 @@ def _find_medicine_for_update(conn: psycopg.Connection, nombre: str, cod_barras:
         """
         SELECT *
         FROM medicamento
-        WHERE lower(trim(nombre)) = lower(trim(%s))
+        WHERE lower(trim(nombre)) = ANY(%s::text[])
         LIMIT 1
         FOR UPDATE
         """,
-        (nombre,),
+        (_medicine_lookup_terms(nombre),),
     ).fetchone()
+
+
+def normalize_medicine_name(value: Any) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+
+    key = _medicine_key(raw)
+    return MEDICINE_ALIASES.get(key, raw)
+
+
+def _medicine_lookup_terms(nombre: str) -> list[str]:
+    canonical = normalize_medicine_name(nombre)
+    canonical_key = _medicine_key(canonical)
+    terms = {canonical.lower()}
+    for alias, target in MEDICINE_ALIASES.items():
+        if _medicine_key(target) == canonical_key:
+            terms.add(alias)
+    return sorted(terms)
+
+
+def _medicine_key(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value)
+    return "".join(ch for ch in normalized if not unicodedata.combining(ch)).strip().lower()
 
 
 def _int_or_default(value: Any, default: int) -> int:

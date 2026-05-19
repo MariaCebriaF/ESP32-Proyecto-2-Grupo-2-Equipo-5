@@ -14,7 +14,7 @@ struct MedicineSlot {
 MedicineSlot demoMedicines[] = {
   {"Paracetamol", "847000100001", "", "2027-05-01", 1},
   {"Ibuprofeno", "847000100002", "", "2027-08-15", 1},
-  {"Amoxicilina", "847000100003", "", "2026-12-20", 1}
+  {"Enantyum", "847000100003", "", "2026-12-20", 1}
 };
 
 const uint8_t demoMedicineCount = sizeof(demoMedicines) / sizeof(demoMedicines[0]);

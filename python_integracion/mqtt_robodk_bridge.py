@@ -119,7 +119,7 @@ class Bridge:
             },
         )
 
-        result = self.robot.move_to_position(str(reservation.posicion))
+        result = self.robot.execute_order(reservation.tipo, reservation.posicion)
         final_state = "completado" if result.ok else "error_robot"
         update_order_status(str(reservation.id_pedido), final_state, result.message, self.db_url)
         self.publish(
