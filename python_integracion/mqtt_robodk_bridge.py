@@ -58,14 +58,21 @@ class Bridge:
         try:
             inserted = register_storage_event(payload, self.db_url)
             estado = "registrado" if inserted else "duplicado"
+            robot_result = self.robot.execute_storage(
+                payload.get("tipo") or payload.get("nombre"),
+                payload.get("posicion") or payload.get("pos"),
+                payload.get("tipo_id") or payload.get("id_tipo"),
+            )
             self.publish(
                 self.topics["storage_status"],
                 {
                     "id_evento": payload.get("id_evento"),
-                    "estado": estado,
+                    "estado": estado if robot_result.ok else "error_robot",
                     "tipo_id": payload.get("tipo_id"),
                     "tipo": payload.get("tipo"),
                     "posicion": payload.get("posicion"),
+                    "robot_mode": robot_result.mode,
+                    "mensaje": robot_result.message,
                     "origen": "python-db",
                 },
             )
