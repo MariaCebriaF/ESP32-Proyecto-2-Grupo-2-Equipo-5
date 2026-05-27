@@ -37,6 +37,7 @@ class RoboDKClient:
         self._rdk = None
         self._item_type_robot = None
         self._item_type_program = None
+        self._robolink = None
 
     @classmethod
     def from_env(cls) -> "RoboDKClient":
@@ -68,26 +69,30 @@ class RoboDKClient:
             return RobotResult(True, "sim", f"Simulacion RoboDK: ejecutar pedido {detail}")
 
         try:
-            rdk, _item_type_robot, item_type_program = self._connect()
+            rdk, _item_type_robot, _item_type_program = self._connect()
         except Exception as exc:
             if self.mode == "real":
                 return RobotResult(False, "real", f"No se pudo conectar con RoboDK: {exc}")
             return RobotResult(True, "sim", f"RoboDK no disponible; simulando pedido id={medicine_id} {medicine_type}: {exc}")
 
-        program = rdk.Item(self.order_program_name, item_type_program)
+        program = self._find_program(self.order_program_name)
         if not program.Valid():
+            visible = self._visible_program_names()
+            detail = f"No existe el programa '{self.order_program_name}' en la estacion"
+            if visible:
+                detail += f". Programas visibles: {', '.join(visible)}"
             if self.order_execution == "program_only":
-                return RobotResult(False, "real", f"No existe el programa '{self.order_program_name}' en la estacion")
+                return RobotResult(False, "real", detail)
             fallback = self.move_to_position(position)
             if fallback.ok:
-                return RobotResult(True, fallback.mode, f"No existe el programa '{self.order_program_name}'; {fallback.message}")
-            return RobotResult(False, fallback.mode, f"No existe el programa '{self.order_program_name}'. {fallback.message}")
+                return RobotResult(True, fallback.mode, f"{detail}; {fallback.message}")
+            return RobotResult(False, fallback.mode, f"{detail}. {fallback.message}")
 
         rdk.setParam("pedido_id", medicine_id)
         rdk.setParam("pedido_tipo", medicine_type)
         rdk.setParam("pedido_posicion", position)
         rdk.setParam("pedido_resultado", "")
-        rdk.RunProgram(self.order_program_name, True)
+        rdk.RunProgram(program.Name(), True)
 
         result = str(rdk.getParam("pedido_resultado") or "").strip().lower()
         if result and result != "ok":
@@ -96,7 +101,7 @@ class RoboDKClient:
         detail = f"id={medicine_id} {medicine_type}"
         if position:
             detail += f" en {position}"
-        return RobotResult(True, "real", f"RoboDK ejecuto '{self.order_program_name}' para {detail}")
+        return RobotResult(True, "real", f"RoboDK ejecuto '{program.Name()}' para {detail}")
 
     def move_to_position(self, position: str) -> RobotResult:
         position = str(position or "").strip()
@@ -131,10 +136,47 @@ class RoboDKClient:
 
         from robodk import robolink
 
+        self._robolink = robolink
         self._rdk = robolink.Robolink()
         self._item_type_robot = robolink.ITEM_TYPE_ROBOT
         self._item_type_program = robolink.ITEM_TYPE_PROGRAM
         return self._rdk, self._item_type_robot, self._item_type_program
+
+    def _find_program(self, name: str):
+        rdk, _item_type_robot, item_type_program = self._connect()
+        robolink = self._robolink
+        names = _program_name_candidates(name)
+        item_types = [
+            item_type_program,
+            getattr(robolink, "ITEM_TYPE_PROGRAM_PYTHON", None),
+            None,
+        ]
+
+        for candidate in names:
+            for item_type in item_types:
+                if item_type is None:
+                    program = rdk.Item(candidate)
+                else:
+                    program = rdk.Item(candidate, item_type)
+                if program.Valid():
+                    return program
+        return rdk.Item(names[0])
+
+    def _visible_program_names(self) -> list[str]:
+        try:
+            rdk, _item_type_robot, item_type_program = self._connect()
+            robolink = self._robolink
+            program_types = {
+                item_type_program,
+                getattr(robolink, "ITEM_TYPE_PROGRAM_PYTHON", None),
+            }
+            return [
+                item.Name()
+                for item in rdk.ItemList()
+                if item.Type() in program_types
+            ]
+        except Exception:
+            return []
 
     def _target_name(self, position: str) -> str:
         clean = position.replace("-", "_")
@@ -143,6 +185,18 @@ class RoboDKClient:
 
 def _medicine_id(medicine_type: str) -> int | None:
     return MEDICINE_IDS.get(medicine_type.strip().lower())
+
+
+def _program_name_candidates(name: str) -> list[str]:
+    clean = str(name or "").strip()
+    if not clean:
+        return [DEFAULT_ORDER_PROGRAM_NAME, f"{DEFAULT_ORDER_PROGRAM_NAME}.py"]
+    names = [clean]
+    if clean.endswith(".py"):
+        names.append(clean[:-3])
+    else:
+        names.append(f"{clean}.py")
+    return list(dict.fromkeys(names))
 
 
 def _valid_medicine_id(value: int | None) -> int | None:
