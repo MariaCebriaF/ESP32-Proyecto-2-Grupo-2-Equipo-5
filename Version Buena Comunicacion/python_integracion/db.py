@@ -166,7 +166,7 @@ def register_storage_event(payload: dict[str, Any], db_url: str | None = None) -
                         cod_barras = COALESCE(NULLIF(%s, ''), cod_barras)
                     WHERE id_medicamento = %s
                     """,
-                    (cantidad, nombre, posicion, caducidad, cod_barras, cod_barras, existing["id_medicamento"]),
+                    (cantidad, nombre, posicion, caducidad, cod_barras, existing["id_medicamento"]),
                 )
                 return False
 
