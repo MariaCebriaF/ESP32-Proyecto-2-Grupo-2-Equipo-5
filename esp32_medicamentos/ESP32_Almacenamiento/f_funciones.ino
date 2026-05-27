@@ -4,6 +4,7 @@ uint8_t rackX = RACK_START_X;
 uint8_t rackY = RACK_START_Y;
 
 struct MedicineSlot {
+  uint8_t tipoId;
   const char* tipo;
   const char* codBarras;
   const char* posicion;
@@ -12,9 +13,9 @@ struct MedicineSlot {
 };
 
 MedicineSlot demoMedicines[] = {
-  {"Paracetamol", "847000100001", "", "2027-05-01", 1},
-  {"Ibuprofeno", "847000100002", "", "2027-08-15", 1},
-  {"Enantyum", "847000100003", "", "2026-12-20", 1}
+  {1, "Paracetamol", "847000100001", "", "2027-05-01", 1},
+  {2, "Ibuprofeno", "847000100002", "", "2027-08-15", 1},
+  {3, "Enantyum", "847000100003", "", "2026-12-20", 1}
 };
 
 const uint8_t demoMedicineCount = sizeof(demoMedicines) / sizeof(demoMedicines[0]);
@@ -29,12 +30,31 @@ void setInternalLed(uint8_t status) {
   digitalWrite(LED_BUILTIN, status ? HIGH : LOW);
 }
 
-void publishStorageEvent(const char* tipo, const char* codBarras, const char* posicion, const char* caducidad, uint8_t cantidad) {
+uint8_t medicineIdFromType(const char* tipo) {
+  String normalized = String(tipo);
+  normalized.trim();
+  normalized.toLowerCase();
+
+  if (normalized == "paracetamol") {
+    return 1;
+  }
+  if (normalized == "ibuprofeno") {
+    return 2;
+  }
+  if (normalized == "enantyum" || normalized == "amoxicilina") {
+    return 3;
+  }
+  return 0;
+}
+
+void publishStorageEvent(uint8_t tipoId, const char* tipo, const char* codBarras, const char* posicion, const char* caducidad, uint8_t cantidad) {
   JsonDocument doc;
   String eventId = String("ALM-") + String(eventCounter++);
+  uint8_t resolvedTipoId = tipoId == 0 ? medicineIdFromType(tipo) : tipoId;
 
   doc["id_evento"] = eventId;
   doc["device_id"] = deviceID;
+  doc["tipo_id"] = resolvedTipoId;
   doc["tipo"] = tipo;
   doc["cod_barras"] = codBarras;
   doc["posicion"] = posicion;
@@ -52,7 +72,7 @@ void publishStorageEvent(const char* tipo, const char* codBarras, const char* po
 void publishSelectedDemoMedicine() {
   MedicineSlot medicine = demoMedicines[selectedMedicine];
   String posicion = currentRackPosition();
-  publishStorageEvent(medicine.tipo, medicine.codBarras, posicion.c_str(), medicine.caducidad, medicine.cantidad);
+  publishStorageEvent(medicine.tipoId, medicine.tipo, medicine.codBarras, posicion.c_str(), medicine.caducidad, medicine.cantidad);
   advanceRackPosition();
 
   selectedMedicine = (selectedMedicine + 1) % demoMedicineCount;
@@ -164,7 +184,7 @@ void processSerialCommand(String command) {
     }
 
     String posicion = currentRackPosition();
-    publishStorageEvent(tipo.c_str(), codBarras.c_str(), posicion.c_str(), caducidad.c_str(), cantidad);
+    publishStorageEvent(medicineIdFromType(tipo.c_str()), tipo.c_str(), codBarras.c_str(), posicion.c_str(), caducidad.c_str(), cantidad);
     advanceRackPosition();
     return;
   }
@@ -196,7 +216,7 @@ void processSerialCommand(String command) {
     cantidad = 1;
   }
 
-  publishStorageEvent(tipo.c_str(), codBarras.c_str(), posicion.c_str(), caducidad.c_str(), cantidad);
+  publishStorageEvent(medicineIdFromType(tipo.c_str()), tipo.c_str(), codBarras.c_str(), posicion.c_str(), caducidad.c_str(), cantidad);
 }
 
 void printSerialHelp() {

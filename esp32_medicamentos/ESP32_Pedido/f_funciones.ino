@@ -2,14 +2,15 @@ uint8_t ledStatus = 0;
 unsigned long requestCounter = 1;
 
 struct MedicineRequest {
+  uint8_t tipoId;
   const char* tipo;
   uint8_t cantidad;
 };
 
 MedicineRequest demoRequests[] = {
-  {"Paracetamol", 1},
-  {"Ibuprofeno", 1},
-  {"Enantyum", 1}
+  {1, "Paracetamol", 1},
+  {2, "Ibuprofeno", 1},
+  {3, "Enantyum", 1}
 };
 
 const uint8_t demoRequestCount = sizeof(demoRequests) / sizeof(demoRequests[0]);
@@ -24,12 +25,31 @@ void setInternalLed(uint8_t status) {
   digitalWrite(LED_BUILTIN, status ? HIGH : LOW);
 }
 
-void publishMedicineRequest(const char* tipo, uint8_t cantidad) {
+uint8_t medicineIdFromType(const char* tipo) {
+  String normalized = String(tipo);
+  normalized.trim();
+  normalized.toLowerCase();
+
+  if (normalized == "paracetamol") {
+    return 1;
+  }
+  if (normalized == "ibuprofeno") {
+    return 2;
+  }
+  if (normalized == "enantyum" || normalized == "amoxicilina") {
+    return 3;
+  }
+  return 0;
+}
+
+void publishMedicineRequest(uint8_t tipoId, const char* tipo, uint8_t cantidad) {
   JsonDocument doc;
   String requestId = String("PED-") + String(requestCounter++);
+  uint8_t resolvedTipoId = tipoId == 0 ? medicineIdFromType(tipo) : tipoId;
 
   doc["id_pedido"] = requestId;
   doc["device_id"] = deviceID;
+  doc["tipo_id"] = resolvedTipoId;
   doc["tipo"] = tipo;
   doc["cantidad"] = cantidad == 0 ? 1 : cantidad;
 
@@ -43,7 +63,7 @@ void publishMedicineRequest(const char* tipo, uint8_t cantidad) {
 
 void publishSelectedDemoRequest() {
   MedicineRequest request = demoRequests[selectedRequest];
-  publishMedicineRequest(request.tipo, request.cantidad);
+  publishMedicineRequest(request.tipoId, request.tipo, request.cantidad);
 
   selectedRequest = (selectedRequest + 1) % demoRequestCount;
 }
@@ -108,7 +128,7 @@ void processSerialCommand(String command) {
 
   int p1 = command.indexOf(' ');
   if (p1 < 0) {
-    publishMedicineRequest(command.c_str(), 1);
+    publishMedicineRequest(medicineIdFromType(command.c_str()), command.c_str(), 1);
     return;
   }
 
@@ -119,7 +139,7 @@ void processSerialCommand(String command) {
     cantidad = 1;
   }
 
-  publishMedicineRequest(tipo.c_str(), cantidad);
+  publishMedicineRequest(medicineIdFromType(tipo.c_str()), tipo.c_str(), cantidad);
 }
 
 void printSerialHelp() {
