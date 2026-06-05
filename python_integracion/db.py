@@ -88,52 +88,26 @@ def seed_demo_data(db_url: str | None = None) -> None:
     ]
     with connect(db_url) as conn:
         for row in rows:
-            existing = conn.execute(
+            conn.execute(
                 """
-                SELECT id_medicamento
-                FROM medicamento
-                WHERE cod_barras::text = %s
-                LIMIT 1
+                INSERT INTO medicamento (
+                  id_medicamento, cod_barras, nombre, caducidad, descripcion,
+                  stock, estado, pos, precio_venta, seguro_ss
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (id_medicamento) DO UPDATE SET
+                  cod_barras = EXCLUDED.cod_barras,
+                  nombre = EXCLUDED.nombre,
+                  caducidad = EXCLUDED.caducidad,
+                  descripcion = EXCLUDED.descripcion,
+                  stock = EXCLUDED.stock,
+                  estado = EXCLUDED.estado,
+                  pos = EXCLUDED.pos,
+                  precio_venta = EXCLUDED.precio_venta,
+                  seguro_ss = EXCLUDED.seguro_ss
                 """,
-                (str(row[1]),),
-            ).fetchone()
-            if existing:
-                conn.execute(
-                    """
-                    UPDATE medicamento
-                    SET nombre = %s,
-                        caducidad = %s,
-                        descripcion = %s,
-                        stock = %s,
-                        estado = %s,
-                        pos = %s,
-                        precio_venta = %s,
-                        seguro_ss = %s
-                    WHERE id_medicamento = %s
-                    """,
-                    (row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9], existing["id_medicamento"]),
-                )
-            else:
-                conn.execute(
-                    """
-                    INSERT INTO medicamento (
-                      id_medicamento, cod_barras, nombre, caducidad, descripcion,
-                      stock, estado, pos, precio_venta, seguro_ss
-                    )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (id_medicamento) DO UPDATE SET
-                      cod_barras = EXCLUDED.cod_barras,
-                      nombre = EXCLUDED.nombre,
-                      caducidad = EXCLUDED.caducidad,
-                      descripcion = EXCLUDED.descripcion,
-                      stock = EXCLUDED.stock,
-                      estado = EXCLUDED.estado,
-                      pos = EXCLUDED.pos,
-                      precio_venta = EXCLUDED.precio_venta,
-                      seguro_ss = EXCLUDED.seguro_ss
-                    """,
-                    row,
-                )
+                row,
+            )
 
 
 def register_storage_event(payload: dict[str, Any], db_url: str | None = None) -> bool:
@@ -141,7 +115,7 @@ def register_storage_event(payload: dict[str, Any], db_url: str | None = None) -
     nombre = normalize_medicine_name(payload.get("nombre") or payload.get("tipo") or medicine_name_from_id(tipo_id))
     posicion = str(payload.get("pos") or payload.get("posicion") or "").strip()
     cantidad = int(payload.get("cantidad") or 1)
-    cod_barras = _barcode_or_empty(payload.get("cod_barras"))
+    cod_barras = _int_or_default(payload.get("cod_barras"), 0)
     caducidad = payload.get("caducidad")
 
     if not nombre or not posicion:
@@ -163,10 +137,10 @@ def register_storage_event(payload: dict[str, Any], db_url: str | None = None) -
                         estado = 'disponible',
                         pos = COALESCE(%s, pos),
                         caducidad = COALESCE(%s, caducidad),
-                        cod_barras = COALESCE(NULLIF(%s, ''), cod_barras)
+                        cod_barras = CASE WHEN %s <> 0 THEN %s ELSE cod_barras END
                     WHERE id_medicamento = %s
                     """,
-                    (cantidad, nombre, posicion, caducidad, cod_barras, existing["id_medicamento"]),
+                    (cantidad, nombre, posicion, caducidad, cod_barras, cod_barras, existing["id_medicamento"]),
                 )
                 return False
 
@@ -293,13 +267,13 @@ def inventory_snapshot(db_url: str | None = None) -> list[dict[str, Any]]:
         return [dict(row) for row in rows]
 
 
-def _find_medicine_for_update(conn: psycopg.Connection, nombre: str, cod_barras: str) -> dict[str, Any] | None:
+def _find_medicine_for_update(conn: psycopg.Connection, nombre: str, cod_barras: int) -> dict[str, Any] | None:
     if cod_barras:
         row = conn.execute(
             """
             SELECT *
             FROM medicamento
-            WHERE cod_barras::text = %s
+            WHERE cod_barras = %s
             LIMIT 1
             FOR UPDATE
             """,
@@ -362,5 +336,8 @@ def _medicine_key(value: str) -> str:
     return "".join(ch for ch in normalized if not unicodedata.combining(ch)).strip().lower()
 
 
-def _barcode_or_empty(value: Any) -> str:
-    return str(value or "").strip()
+def _int_or_default(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default

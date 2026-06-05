@@ -66,7 +66,6 @@ class Bridge:
                     "tipo_id": payload.get("tipo_id"),
                     "tipo": payload.get("tipo"),
                     "posicion": payload.get("posicion"),
-                    "mensaje": "Registro de almacen guardado en PostgreSQL",
                     "origen": "python-db",
                 },
             )
