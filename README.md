@@ -140,7 +140,7 @@ Los pedidos se procesan mediante una cola FIFO implementada en Python.
 - Programa Python controlador  
 - PostgreSQL  
 - Botones físicos  
-- LED RGB  
+- LED RGB integrado de la ESP32-S3
 - RoboDK  
 
 ---
@@ -243,7 +243,7 @@ El montaje físico utiliza:
 - Protoboard
 - Pulsadores
 - Resistencias
-- LEDs RGB
+- LED RGB integrado de la ESP32-S3
 
 Cada botón se conecta a un GPIO específico y representa un medicamento concreto.
 

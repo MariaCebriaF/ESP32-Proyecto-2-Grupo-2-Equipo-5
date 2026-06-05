@@ -17,9 +17,9 @@ void alRecibirMensajePorTopic(char* topic, String incomingMessage) {
     if (incomingMessage == "demo") {
       publishSelectedDemoRequest();
     } else if (incomingMessage == "led_on") {
-      setInternalLed(1);
+      setRgbLedWhite();
     } else if (incomingMessage == "led_off") {
-      setInternalLed(0);
+      setRgbLedOff();
     } else {
       warnln("Comando MQTT de pedido no reconocido.");
     }
